@@ -62,7 +62,7 @@ foo(10)
 
 //: ## Applicative
 extension Optional {
-    func apply<U>(f: (T -> U)?) -> U? {
+    func apply<U>(f: (Wrapped -> U)?) -> U? {
         switch f {
         case .Some(let someF): return self.map(someF)
         case .None: return .None
