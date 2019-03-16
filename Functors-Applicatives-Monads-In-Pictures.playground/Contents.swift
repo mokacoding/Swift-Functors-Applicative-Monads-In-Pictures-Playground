@@ -6,8 +6,8 @@
 //: Optional is just a type
 
 enum MyOptional<T> {
-    case Some(T)
-    case None
+    case some(T)
+    case none
 }
 
 //: ## Functor
@@ -18,60 +18,72 @@ func plusThree(addend: Int) -> Int {
     return addend + 3
 }
 
-Optional.Some(2).map(plusThree)
+Optional.some(2).map(plusThree)
 
 //: We can use autoclosures and be more succint
 
-Optional.Some(2).map { $0 + 3 }
+Optional.some(2).map { $0 + 3 }
 
 //: If the optional value is .None, map will return .None (nil)
 
-Optional.None.map { $0 + 3 }
+Optional.none.map { $0 + 3 }
 
 //: Map implementation might look like this
 
-func myMap<T, U>(a: T?, f: T -> U) -> U? {
+func myMap<T, U>(a: T?, f: (T) -> U) -> U? {
     switch a {
-    case .Some(let x): return f(x)
-    case .None: return .None
+    case .some(let x): return f(x)
+    case .none: return .none
     }
 }
 
-myMap(Optional.Some(2), f: { $0 + 3 })
+myMap(a: Optional.some(2), f: { $0 + 3 })
 
 //: We can define an infix operator
 
-infix operator <^> { associativity left }
+precedencegroup AlternativePrecedence {
+    associativity: left
+    higherThan: LogicalConjunctionPrecedence
+    lowerThan: ComparisonPrecedence
+}
 
-func <^><T, U>(f: T -> U, a: T?) -> U? {
+precedencegroup ApplicativePrecedence {
+    associativity: left
+    higherThan: AlternativePrecedence
+    lowerThan: NilCoalescingPrecedence
+}
+
+infix operator <^> : ApplicativePrecedence
+
+func <^><T, U>(f: (T) -> U, a: T?) -> U? {
     return a.map(f)
 }
 
-plusThree <^> Optional.Some(2)
+plusThree <^> Optional.some(2)
 
 //: Turns out functions can be mapped as well. Functions are functors too!
 
-typealias IntFunction = Int -> Int
+typealias IntFunction = (Int) -> Int
 
-func map(f: IntFunction, _ g: IntFunction) -> IntFunction {
+func map(_ f: @escaping IntFunction, _ g: @escaping IntFunction) -> IntFunction {
     return { x in f(g(x)) }
 }
 
-let foo = map({ $0 + 2 }, { $0 + 3 })
+let foo = map({ $0 * 2 }, { $0 + 3 })
 foo(10)
 
 //: ## Applicative
 extension Optional {
-    func apply<U>(f: (Wrapped -> U)?) -> U? {
+    func apply<U>(f: ((Wrapped) -> U)?) -> U? {
         switch f {
-        case .Some(let someF): return self.map(someF)
-        case .None: return .None
+        case .some(let someF): return self.map(someF)
+        case .none: return .none
         }
     }
 }
 
 extension Array {
-    func apply<U>(fs: [Element -> U]) -> [U] {
+    func apply<U>(fs: [(Element) -> U]) -> [U] {
         var result = [U]()
         for f in fs {
             for element in self.map(f) {
@@ -82,50 +94,67 @@ extension Array {
     }
 }
 
-infix operator <*> { associativity left }
+infix operator <*> : ApplicativePrecedence
 
-func <*><T, U>(f: (T -> U)?, a: T?) -> U? {
-    return a.apply(f)
+func <*><T, U>(f: ((T) -> U)?, a: T?) -> U? {
+    return a.apply(f: f)
 }
 
-func <*><T, U>(f: [T -> U], a: [T]) -> [U] {
-    return a.apply(f)
+func <*><T, U>(_ f: [(T) -> U], a: [T]) -> [U] {
+    return a.apply(fs: f)
 }
 
-Optional.Some({ $0 + 3 }) <*> Optional.Some(2)
+Optional.some({ $0 + 3 }) <*> Optional.some(2)
 
 let arrayApplicative = [ { $0 + 3 }, { $0 * 2 } ] <*> [1, 2, 3]
 //: _Playground (as of Xcode 7 Beta 3) doesn't seem to be happy show the result of array applications , so we'll print open the console with Cmd + Y to see it_
 
 print(arrayApplicative)
 
-func curriedAddition(a: Int)(b: Int) -> Int {
-    return a + b
+func curriedAddition(a: Int) -> (Int) -> Int {
+    return { (b: Int) -> Int in
+        return a + b
+    }
 }
 
 curriedAddition <^> Optional(2) <*> Optional(3)
 
-func curriedTimes(a: Int)(b: Int) -> Int {
-    return a * b
+func curriedTimes(a: Int) -> (Int) -> Int {
+    return { (b: Int) -> Int in
+        return a * b
+    }
 }
 
 curriedTimes <^> Optional(5) <*> Optional(3)
 
 //: ## Monads
 
-infix operator >>- { associativity left }
+precedencegroup MonadicPrecedenceRight {
+    associativity: right
+    lowerThan: LogicalDisjunctionPrecedence
+    higherThan: AssignmentPrecedence
+}
 
-func >>-<T, U>(a: T?, f: T -> U?) -> U? {
+precedencegroup MonadicPrecedenceLeft {
+    associativity: left
+    lowerThan: LogicalDisjunctionPrecedence
+    higherThan: AssignmentPrecedence
+}
+
+infix operator >>- : MonadicPrecedenceLeft
+infix operator -<< : MonadicPrecedenceRight
+
+func >>-<T, U>(a: T?, f: (T) -> U?) -> U? {
     return a.flatMap(f)
 }
 
 func half(a: Int) -> Int? {
-    return a % 2 == 0 ? a / 2 : .None
+    return a % 2 == 0 ? a / 2 : .none
 }
 
 Optional(3) >>- half
 Optional(4) >>- half
-Optional.None >>- half
+Optional.none >>- half
 
 //: We can even chain >>-
 
